@@ -2,9 +2,9 @@ import streamlit as st
 import fitz  # PyMuPDF
 import re
 
-# =========================
-# CONFIGURATION
-# =========================
+# ============================
+# CONFIG
+# ============================
 CONFIG = {
     "role": "Data Analyst (Premium)",
     "weights": {
@@ -12,47 +12,49 @@ CONFIG = {
         "projects": 25,
         "experience": 20,
         "domain": 15,
-        "proof": 15,
+        "proof": 15
     },
     "keywords": {
-        "tools": ["sql", "python", "excel", "power bi", "tableau", "r", "pandas", "numpy", "matplotlib"],
-        "projects": ["analysis", "dashboard", "etl", "visualization", "business problem"],
-        "domain": ["fintech", "banking", "credit", "risk", "payment", "regulatory"],
-        "proof": ["github", "kaggle", "tableau", "portfolio", "linkedin"],
-        "impact": ["kpi", "metrics", "roi", "improved", "growth", "decision-making"],
+        "tools": ["sql", "python", "excel", "power bi", "tableau", "r", "pandas", "numpy", "matplotlib", "statistics", "ml"],
+        "projects": ["analysis", "dashboard", "etl", "automation", "visualization", "business problem"],
+        "domain": ["fintech", "banking", "payment", "credit", "risk", "regulatory", "financial modeling"],
+        "proof": ["github", "portfolio", "tableau public", "kaggle", "linkedin project"]
     }
 }
 
-# =========================
-# UTILS
-# =========================
+# ============================
+# PDF TEXT EXTRACTION
+# ============================
 def extract_text_from_pdf(pdf_file):
-    """Extract text from uploaded PDF"""
     doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
     text = ""
     for page in doc:
         text += page.get_text("text")
     return text.lower()
 
-
-def match_keywords(keywords, text):
-    return [kw for kw in keywords if kw in text]
-
-
+# ============================
+# ATS ANALYSIS
+# ============================
 def analyze_resume(resume_text, jd_text=""):
     score = 0
     feedback = {}
     results = {}
 
     # Tools
-    matched_tools = match_keywords(CONFIG["keywords"]["tools"], resume_text)
+    matched_tools = [kw for kw in CONFIG["keywords"]["tools"] if kw in resume_text]
     results["tools"] = matched_tools
-    score += (len(matched_tools) / len(CONFIG["keywords"]["tools"])) * CONFIG["weights"]["tools"]
+    if matched_tools:
+        score += (len(matched_tools) / len(CONFIG["keywords"]["tools"])) * CONFIG["weights"]["tools"]
+    else:
+        feedback["tools"] = "❌ Add technical tools (SQL, Python, Power BI, Tableau, etc.)."
 
     # Projects
-    matched_projects = match_keywords(CONFIG["keywords"]["projects"], resume_text)
+    matched_projects = [kw for kw in CONFIG["keywords"]["projects"] if kw in resume_text]
     results["projects"] = matched_projects
-    score += (len(matched_projects) / len(CONFIG["keywords"]["projects"])) * CONFIG["weights"]["projects"]
+    if matched_projects:
+        score += (len(matched_projects) / len(CONFIG["keywords"]["projects"])) * CONFIG["weights"]["projects"]
+    else:
+        feedback["projects"] = "❌ Highlight relevant projects (dashboards, automation, business problem solving)."
 
     # Experience
     exp_match = re.search(r'(\d+)\+?\s*year', resume_text)
@@ -62,62 +64,58 @@ def analyze_resume(resume_text, jd_text=""):
         score += CONFIG["weights"]["experience"]
     elif experience >= 1:
         score += CONFIG["weights"]["experience"] * 0.5
-        feedback["experience"] = "⚠️ Add more relevant BA/DA experience."
+        feedback["experience"] = "⚠️ Add more relevant BA/Data Analyst experience."
     else:
-        feedback["experience"] = "ℹ️ Fresher profile: highlight academic/relevant projects."
+        feedback["experience"] = "ℹ️ Fresher: Compensate with strong academic/relevant projects."
 
-    # Domain
-    matched_domain = match_keywords(CONFIG["keywords"]["domain"], resume_text + jd_text)
+    # Domain Knowledge
+    matched_domain = [kw for kw in CONFIG["keywords"]["domain"] if kw in resume_text]
     results["domain"] = matched_domain
     if matched_domain:
         score += (len(matched_domain) / len(CONFIG["keywords"]["domain"])) * CONFIG["weights"]["domain"]
     else:
-        feedback["domain"] = "❌ Add FinTech/Banking keywords if relevant."
+        feedback["domain"] = "❌ Add FinTech/Banking knowledge."
 
     # Proof of Work
-    matched_proof = match_keywords(CONFIG["keywords"]["proof"], resume_text)
+    matched_proof = [kw for kw in CONFIG["keywords"]["proof"] if kw in resume_text]
     results["proof"] = matched_proof
     if matched_proof:
         score += CONFIG["weights"]["proof"]
     else:
-        feedback["proof"] = "❌ Add GitHub/Kaggle/Tableau/Portfolio links."
-
-    # Business Impact
-    matched_impact = match_keywords(CONFIG["keywords"]["impact"], resume_text)
-    results["impact"] = matched_impact
+        feedback["proof"] = "❌ Add proof of work (GitHub, Kaggle, Tableau, Portfolio)."
 
     return round(score, 2), results, feedback
 
-# =========================
-# STREAMLIT UI
-# =========================
-st.set_page_config(page_title="SkiDev ATS Resume Checker", page_icon="🚀", layout="wide")
+# ============================
+# STREAMLIT APP
+# ============================
+st.set_page_config(page_title="SkiDev ATS Resume Checker", page_icon="📄", layout="wide")
 
-st.title("🚀 SkiDev ATS Resume Checker")
-st.write("Upload your resume PDF + optional JD to get ATS Score & Feedback.")
+st.title("🚀 SkiDev ATS Resume Checker (Premium)")
+st.write("Upload your resume PDF and (optionally) paste a Job Description (JD) for analysis.")
 
-resume_file = st.file_uploader("📂 Upload Resume (PDF)", type=["pdf"])
-jd_text = st.text_area("📑 Paste Job Description (optional)", "")
+uploaded_file = st.file_uploader("📂 Upload Resume (PDF only)", type=["pdf"])
+jd_input = st.text_area("📑 Paste JD (or leave blank to use default Data Analyst role)")
 
-if resume_file:
-    with st.spinner("Analyzing resume..."):
-        try:
-            resume_text = extract_text_from_pdf(resume_file)
-            score, results, feedback = analyze_resume(resume_text, jd_text)
+if uploaded_file:
+    resume_text = extract_text_from_pdf(uploaded_file)
+    jd_text = jd_input if jd_input.strip().lower() != "" else ""
 
-            st.subheader("📊 ATS Screening Report")
-            st.metric("Final ATS Score", f"{score}/100")
+    score, results, feedback = analyze_resume(resume_text, jd_text)
 
-            st.write("### ✅ Matched Keywords")
-            for k, v in results.items():
-                st.write(f"- **{k}**: {v if v else 'None'}")
+    st.subheader("📊 ATS Screening Report")
+    st.metric("Final ATS Score", f"{score}/100")
 
-            st.write("### ⚠️ Feedback")
-            if feedback:
-                for v in feedback.values():
-                    st.write(f"- {v}")
-            else:
-                st.success("Your resume looks strong! ✅")
+    with st.expander("✅ Matched Keywords"):
+        st.write(results)
 
-        except Exception as e:
-            st.error(f"Error processing resume: {e}")
+    with st.expander("⚠️ Detailed Feedback"):
+        for k, v in feedback.items():
+            st.write(f"- {v}")
+
+    if score >= 70:
+        st.success("✅ Strong Fit! Your resume is highly competitive.")
+    elif score >= 50:
+        st.warning("⚠️ Borderline – Improve tools/projects/impact keywords.")
+    else:
+        st.error("❌ Not a Fit – Needs major improvements.")
